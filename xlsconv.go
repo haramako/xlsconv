@@ -1,31 +1,32 @@
 package main
 
 import (
-	"strings"
-	"os"
-	"path/filepath"
+	"crypto/md5"
+	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"fmt"
-	"flag"
-	"crypto/md5"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/tealeg/xlsx"
 )
 
 var optOutput = flag.String("o", "", "output file")
 
-func main(){
+func main() {
 	flag.Parse()
 	if flag.NArg() < 2 {
 		fmt.Println("not input file")
 		os.Exit(1)
 	}
-	
+
 	args := flag.Args()
 	file := args[0]
 	sheet := args[1]
-	
-	defer func(){
+
+	defer func() {
 		err := recover()
 		if err != nil {
 			fmt.Println(err)
@@ -36,14 +37,14 @@ func main(){
 	var out io.Writer
 	if *optOutput != "" {
 		var err error
-		out, err = os.OpenFile(*optOutput, os.O_CREATE | os.O_WRONLY, 0666)
+		out, err = os.OpenFile(*optOutput, os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			panic("cannot open file " + *optOutput)
 		}
-	}else{
+	} else {
 		out = os.Stdout
 	}
-	
+
 	hash, _, err := convert(file)
 	if err != nil {
 		panic(err)
@@ -70,14 +71,14 @@ func tempPath(name string) string {
 }
 
 func cachedIndexPath(hash string) string {
-	return tempPath(hash+".index")
+	return tempPath(hash + ".index")
 }
 
 func cachedSheetPath(hash, sheet string) string {
-	return tempPath(hash+"_"+sheet+".tsv")
+	return tempPath(hash + "_" + sheet + ".tsv")
 }
 
-func fileHash(file string) (string,error) {
+func fileHash(file string) (string, error) {
 	data, err := ioutil.ReadFile(file)
 	if err != nil {
 		return "", err
@@ -102,13 +103,13 @@ func convert(file string) (string, []string, error) {
 		}
 		sheets := strings.Split(string(sheetsStr), "\n")
 		return hash, sheets, nil
-	}else{
+	} else {
 		// キャッシュがなかった
 		sheets, err := convertCache(file, hash)
 		if err != nil {
 			return "", nil, err
 		}
-		err = ioutil.WriteFile(cachedIndexPath(hash), []byte(strings.Join(sheets,"\n")), 0666)
+		err = ioutil.WriteFile(cachedIndexPath(hash), []byte(strings.Join(sheets, "\n")), 0666)
 		if err != nil {
 			return "", nil, err
 		}
@@ -120,30 +121,28 @@ func convertCache(file string, hash string) ([]string, error) {
 	fmt.Fprintf(os.Stderr, "converting file %v\n", file)
 
 	sheets := []string{}
-	
-	xls, err := xlsx.OpenFile( file )
+
+	xls, err := xlsx.OpenFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("can't open file %s", file)
 	}
-	
+
 	for _, sheet := range xls.Sheets {
 		fmt.Fprintf(os.Stderr, "converting sheet %v\n", sheet.Name)
-		
-		out, err := os.OpenFile(cachedSheetPath(hash,sheet.Name), os.O_CREATE | os.O_WRONLY, 0666)
+
+		out, err := os.OpenFile(cachedSheetPath(hash, sheet.Name), os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			return nil, err
 		}
-		defer func(){
+		defer func() {
 			out.Close()
 		}()
 
 		sheets = append(sheets, sheet.Name)
-		
+
 		for _, row := range sheet.Rows {
 			for _, cell := range row.Cells {
-				str, err := cell.String()
-				if err != nil {
-				}
+				str := cell.String()
 				str = strings.Replace(str, "\\", "\\\\", -1)
 				str = strings.Replace(str, "\n", "\\n", -1)
 				str = strings.Replace(str, "\t", "\\t", -1)
